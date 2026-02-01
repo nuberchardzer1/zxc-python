@@ -1,0 +1,83 @@
+name: Fuzzing
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Fuzzing mode'
+        required: true
+        default: 'batch'
+        type: choice
+        options:
+        - code-change
+        - batch
+      fuzz_seconds:
+        description: 'Duration (seconds)'
+        required: true
+        default: '3600'
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 1 * * 1'
+
+permissions: 
+  contents: read
+  security-events: write
+
+jobs:
+  fuzzing:
+    name: Run Fuzzing (${{ matrix.fuzzer }} - ${{ matrix.sanitizer }})
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ matrix.fuzzer }}-${{ matrix.sanitizer }}-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [address, undefined]
+        fuzzer: [decompress, roundtrip]
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v6
+
+    - name: Configure Fuzzer Target
+      run: |
+        sed -i '2i export FUZZER_TARGET="${{ matrix.fuzzer }}"' .clusterfuzzlite/build.sh
+
+    - name: Build Fuzzers (${{ matrix.fuzzer }} - ${{ matrix.sanitizer }})
+      id: build
+      uses: google/clusterfuzzlite/actions/build_fuzzers@v1
+      with:
+        language: c
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        sanitizer: ${{ matrix.sanitizer }}
+
+    - name: Run Fuzzers (${{ matrix.sanitizer }})
+      id: run
+      uses: google/clusterfuzzlite/actions/run_fuzzers@v1
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        mode: ${{ github.event_name == 'pull_request' && 'code-change' || inputs.mode || 'batch' }}
+        fuzz-seconds: ${{ github.event_name == 'pull_request' && 120 || inputs.fuzz_seconds || 3600 }}
+        sanitizer: ${{ matrix.sanitizer }}
+        output-sarif: true
+
+    - name: Upload SARIF to GitHub Security
+      if: success() || failure()
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: .
+        category: clusterfuzzlite-${{ matrix.fuzzer }}-${{ matrix.sanitizer }}
+
+  tsan:
+    name: Thread Sanitizer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build with TSan
+        run: |
+          cmake -B build -DCMAKE_C_FLAGS="-fsanitize=thread -g -fno-omit-frame-pointer" -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build
+      - name: Run Tests
+        run: ctest --test-dir build --output-on-failure

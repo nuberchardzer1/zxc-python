@@ -1,0 +1,145 @@
+name: Build & Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+
+jobs:
+  build-and-test:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64
+            os: ubuntu-latest
+            artifact_name: zxc
+            asset_name: zxc-linux-x86_64
+            cmake_flags: "-DZXC_NATIVE_ARCH=OFF"
+          - name: Linux ARM64
+            os: ubuntu-24.04-arm
+            artifact_name: zxc
+            asset_name: zxc-linux-aarch64
+            cmake_flags: "-DZXC_NATIVE_ARCH=OFF"
+          - name: macOS ARM64
+            os: macos-latest
+            artifact_name: zxc
+            asset_name: zxc-macos-arm64
+            cmake_flags: "-DZXC_NATIVE_ARCH=OFF"
+          - name: Windows x64
+            os: windows-latest
+            artifact_name: zxc.exe
+            asset_name: zxc-windows-x64.exe
+            cmake_flags: "-DZXC_NATIVE_ARCH=OFF"
+
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Configure CMake
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_flags }}
+
+      - name: Build 
+        run: cmake --build build --config Release --parallel
+
+      - name: Test (native)
+        working-directory: build
+        run: ctest -C Release --output-on-failure
+
+      - name: Test CLI
+        shell: bash
+        run: |
+          BUILD_DIR="build"
+          # Find binary (handle both Ninja and Visual Studio generators)
+          if [ -f "$BUILD_DIR/Release/${{ matrix.artifact_name }}" ]; then
+            ZXC_BIN="$BUILD_DIR/Release/${{ matrix.artifact_name }}"
+          elif [ -f "$BUILD_DIR/${{ matrix.artifact_name }}" ]; then
+            ZXC_BIN="$BUILD_DIR/${{ matrix.artifact_name }}"
+          else
+            echo "Binary not found for CLI test!"
+            find "$BUILD_DIR" -name "${{ matrix.artifact_name }}"
+            exit 1
+          fi
+          
+          echo "Testing with binary: $ZXC_BIN"
+          chmod +x tests/test_cli.sh
+          ./tests/test_cli.sh "$ZXC_BIN"
+
+      - name: Package Release (Archive)
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          mkdir -p release_staging
+          BUILD_DIR="build"
+          
+          # Find and copy binary (handle both Ninja and Visual Studio generators)
+          if [ -f "$BUILD_DIR/Release/${{ matrix.artifact_name }}" ]; then
+            cp "$BUILD_DIR/Release/${{ matrix.artifact_name }}" release_staging/
+          elif [ -f "$BUILD_DIR/${{ matrix.artifact_name }}" ]; then
+            cp "$BUILD_DIR/${{ matrix.artifact_name }}" release_staging/
+          else
+            echo "Binary not found!"
+            exit 1
+          fi
+          
+          # Strip binary on Unix-like systems only
+          if [[ "${{ matrix.os }}" != "windows-latest" ]]; then
+            strip release_staging/${{ matrix.artifact_name }}
+          fi
+          
+          # Copy documentation
+          cp LICENSE release_staging/LICENSE.txt
+          cp README.md release_staging/README.md
+          
+          # Create archive (platform-specific format)
+          cd release_staging
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            # Windows: use 7z (available by default on windows-latest)
+            7z a ../${{ matrix.asset_name }}.zip *
+          else
+            # Unix-like: use tar
+            tar -czvf ../${{ matrix.asset_name }}.tar.gz *
+          fi
+
+      - name: Upload Artifacts
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.asset_name }}
+          path: |
+            ${{ matrix.asset_name }}.tar.gz
+            ${{ matrix.asset_name }}.zip
+
+  release:
+    name: Create GitHub Release
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v7
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            **/*.tar.gz
+            **/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
