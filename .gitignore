@@ -68,3 +68,8 @@ Thumbs.db
 # pytest generated files #
 ##########################
 /.pytest_cache
+
+# benchmarking #
+##########################
+heaptrack*
+*.out
