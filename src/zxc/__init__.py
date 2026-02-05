@@ -1,4 +1,9 @@
-from . import pyzxc_compress, pyzxc_decompress, pyzxc_stream_compress, pyzxc_stream_decompress
+from ._zxc import (
+    pyzxc_compress,
+    pyzxc_decompress,
+    pyzxc_stream_compress,
+    pyzxc_stream_decompress,
+)
 
 __all__ = [
     "compress",
@@ -15,7 +20,7 @@ def decompress(src):
     """Decompress a bytes object"""
     return pyzxc_decompress(src)
 
-def stream_compress(src, dst, n_threads=0, checksum=False):
+def stream_compress(src, dst, n_threads=0, level=3, checksum=False):
     """Compress data from src to dst (file-like objects)"""
     if not hasattr(src, "fileno") or not hasattr(dst, "fileno"):
         raise ValueError("src and dst must be open file-like objects")
@@ -26,7 +31,7 @@ def stream_compress(src, dst, n_threads=0, checksum=False):
     if not dst.writable():
         raise ValueError("Destination file must be writable")
     
-    return pyzxc_stream_compress(src, dst, n_threads, checksum)
+    return pyzxc_stream_compress(src, dst, n_threads, level, checksum)
 
 def stream_decompress(src, dst, n_threads=0, checksum=False):
     """Decompress data from src to dst (file-like objects)"""

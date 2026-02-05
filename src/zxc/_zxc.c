@@ -15,6 +15,35 @@
     } while (0)
 
 // =============================================================================
+// Platform
+// =============================================================================
+
+static inline int zxc_dup(int fd) {
+#ifdef _WIN32
+    return _dup(fd);
+#else
+    return zxc_dup(fd);
+#endif
+}
+
+static inline FILE *zxc_fdopen(int fd, const char *mode) {
+#ifdef _WIN32
+    return _fdopen(fd, mode);
+#else
+    return fdopen(fd, mode);
+#endif
+}
+
+static inline int zxc_close(int fd) {
+#ifdef _WIN32
+    return _close(fd);
+#else
+    return close(fd);
+#endif
+}
+
+
+// =============================================================================
 // Wrapper functions
 // =============================================================================
 
@@ -186,27 +215,27 @@ static PyObject *pyzxc_stream_compress(PyObject *self, PyObject *args,
     if (src_fd == -1 || dst_fd == -1)
         Py_Return_Err(PyExc_RuntimeError, "couldn't get file descriptor");
 
-    int src_dup = dup(src_fd);
+    int src_dup = zxc_dup(src_fd);
     if (src_dup == -1) {
         Py_Return_Errno(PyExc_OSError);
     }
-    int dst_dup = dup(dst_fd);
+    int dst_dup = zxc_dup(dst_fd);
     if (dst_dup == -1) {
-        close(src_dup);
+        zxc_close(src_dup);
         Py_Return_Errno(PyExc_OSError);
     }
 
-    FILE *fsrc = fdopen(src_dup, "rb");
+    FILE *fsrc = zxc_fdopen(src_dup, "rb");
     if (!fsrc) {
-        close(src_dup);
-        close(dst_dup);
+        zxc_close(src_dup);
+        zxc_close(dst_dup);
         Py_Return_Errno(PyExc_OSError);
     }
 
-    FILE *fdst = fdopen(dst_dup, "wb");
+    FILE *fdst = zxc_fdopen(dst_dup, "wb");
     if (!fdst) {
         fclose(fsrc);
-        close(dst_dup);
+        zxc_close(dst_dup);
         Py_Return_Errno(PyExc_OSError);
     }
 
@@ -244,27 +273,27 @@ static PyObject *pyzxc_stream_decompress(PyObject *self, PyObject *args,
     if (src_fd == -1 || dst_fd == -1)
         Py_Return_Err(PyExc_RuntimeError, "couldn't get file descriptor");
 
-    int src_dup = dup(src_fd);
+    int src_dup = zxc_dup(src_fd);
     if (src_dup == -1) {
         Py_Return_Errno(PyExc_OSError);
     }
-    int dst_dup = dup(dst_fd);
+    int dst_dup = zxc_dup(dst_fd);
     if (dst_dup == -1) {
-        close(src_dup);
+        zxc_close(src_dup);
         Py_Return_Errno(PyExc_OSError);
     }
 
-    FILE *fsrc = fdopen(src_dup, "rb");
+    FILE *fsrc = zxc_fdopen(src_dup, "rb");
     if (!fsrc) {
-        close(src_dup);
-        close(dst_dup);
+        zxc_close(src_dup);
+        zxc_close(dst_dup);
         Py_Return_Errno(PyExc_OSError);
     }
 
-    FILE *fdst = fdopen(dst_dup, "wb");
+    FILE *fdst = zxc_fdopen(dst_dup, "wb");
     if (!fdst) {
         fclose(fsrc);
-        close(dst_dup);
+        zxc_close(dst_dup);
         Py_Return_Errno(PyExc_OSError);
     }
 
