@@ -40,31 +40,12 @@ PyDoc_STRVAR(zxc_doc,
              "  stream_compress(src, dst, level=5, checksum=False) -> None\n"
              "  stream_decompress(src, dst, checksum=False) -> None\n");
 
-PyDoc_STRVAR(compress_doc, "compress(data, level=5, checksum=False) -> bytes\n"
-                           "Compress a bytes-like object (buffer protocol).\n");
-
-PyDoc_STRVAR(decompress_doc, "decompress(data, checksum=False) -> bytes\n"
-                             "Decompress ZXC-compressed data.\n"
-                             "Raises RuntimeError on invalid input.\n");
-
-PyDoc_STRVAR(stream_compress_doc,
-             "stream_compress(src, dst, level=5, checksum=False) -> None\n"
-             "Compress from src to dst (file-like or path).\n");
-
-PyDoc_STRVAR(stream_decompress_doc,
-             "stream_decompress(src, dst, checksum=False) -> None\n"
-             "Decompress from src to dst (file-like or path).\n");
-
 static PyMethodDef zxc_methods[] = {
-    {"compress", (PyCFunction)pyzxc_compress, METH_VARARGS | METH_KEYWORDS,
-     compress_doc},
-    {"decompress", (PyCFunction)pyzxc_decompress, METH_VARARGS | METH_KEYWORDS,
-     decompress_doc},
-    {"stream_compress", (PyCFunction)pyzxc_stream_compress,
-     METH_VARARGS | METH_KEYWORDS, stream_compress_doc},
-    {"stream_decompress", (PyCFunction)pyzxc_stream_decompress,
-     METH_VARARGS | METH_KEYWORDS, stream_decompress_doc},
-    {NULL, NULL, 0, NULL} // sentinel
+    {"pyzxc_compress", (PyCFunction)pyzxc_compress, METH_VARARGS | METH_KEYWORDS, NULL},
+    {"pyzxc_decompress", (PyCFunction)pyzxc_decompress, METH_VARARGS | METH_KEYWORDS, NULL},
+    {"pyzxc_stream_compress", (PyCFunction)pyzxc_stream_compress, METH_VARARGS | METH_KEYWORDS, NULL},
+    {"pyzxc_stream_decompress", (PyCFunction)pyzxc_stream_decompress, METH_VARARGS | METH_KEYWORDS, NULL},
+    {NULL, NULL, 0, NULL}  // sentinel
 };
 
 static struct PyModuleDef zxc_module = {PyModuleDef_HEAD_INIT, "_zxc", zxc_doc,
@@ -215,8 +196,6 @@ static PyObject *pyzxc_stream_compress(PyObject *self, PyObject *args,
         Py_Return_Errno(PyExc_OSError);
     }
 
-    // TODO: check fd flags
-
     FILE *fsrc = fdopen(src_dup, "rb");
     if (!fsrc) {
         close(src_dup);
@@ -274,8 +253,6 @@ static PyObject *pyzxc_stream_decompress(PyObject *self, PyObject *args,
         close(src_dup);
         Py_Return_Errno(PyExc_OSError);
     }
-
-    // TODO: check fd flags
 
     FILE *fsrc = fdopen(src_dup, "rb");
     if (!fsrc) {
